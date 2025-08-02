@@ -1,7 +1,7 @@
 #include <Arduino.h>
+#include "pico/bootrom.h"
 #include "Controller.h"
 #include "Controller.pio.h"
-#include "pico/bootrom.h"
 
 Controller::Controller(InitParams *initParams, uint8_t sizeofControllerState) {
     _pin = initParams->pin;
@@ -100,18 +100,4 @@ void Controller::updateState() {
     uint8_t setRumble = _rumble ? 1 : 0;
     uint8_t request[3] = {0x40, 0x03, setRumble};
     transfer(request, sizeof(request), _controllerState, _sizeofControllerState);
-
-    // #ifdef DEBUG_MODE
-    if (
-        (GC_MASK_L & _controllerState[1]) &&
-        (GC_MASK_R & _controllerState[1]) &&
-        (GC_MASK_START & _controllerState[0]) &&
-        (_controllerState[0] & GC_MASK_A) &&
-        (_controllerState[0] & GC_MASK_B) &&
-        (_controllerState[0] & GC_MASK_X) &&
-        (_controllerState[0] & GC_MASK_Y)
-    ) {
-        reset_usb_boot(0, 0);
-    }
-    // #endif
 }
