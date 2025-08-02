@@ -1,9 +1,8 @@
 #pragma once
 
 #include <cstdio>
-
+#include <Arduino.h>
 #include "hardware/pio.h"
-// #include "pico/stdlib.h"
 
 typedef enum { N64 = 0x05, Gamecube = 0x09 } ControllerType;
 
@@ -30,20 +29,48 @@ public:
                   uint8_t responseLength);
 
     double getScaledAnalogAxis(double axisPos, double *minAxis, double *maxAxis);
+    void updateState();
+
+    uint8_t* getControllerState() const {
+        return _controllerState;
+    }
+
+    double getX() {
+        return getScaledAnalogAxis(_controllerState[2], &_minAnalogX, &_maxAnalogX);
+    }
+
+    double getY() {
+        return getScaledAnalogAxis(_controllerState[3], &_minAnalogY, &_maxAnalogY);
+    }
+
+    double getCX() {
+        return getScaledAnalogAxis(_controllerState[4], &_minCX, &_maxCX);
+    }
+
+    double getCY() {
+        return getScaledAnalogAxis(_controllerState[5], &_minCY, &_maxCY);
+    }
+
+    double getL() {
+        return getScaledAnalogAxis(_controllerState[6], &_minL, &_maxL);
+    }
+
+    double getR() {
+        return getScaledAnalogAxis(_controllerState[7], &_minL, &_maxL);
+    }
 
 private:
     static void transfer(PIO pio, uint sm, uint8_t *request,
                          uint8_t requestLength, uint8_t *response,
                          uint8_t responseLength);
 
-    void sendRequest(PIO pio, uint sm, uint8_t *request,
+    static void sendRequest(PIO pio, uint sm, uint8_t *request,
                      uint8_t requestLength);
 
-    void getResponse(PIO pio, uint sm, uint8_t *response,
+    static void getResponse(PIO pio, uint sm, uint8_t *response,
                      uint8_t responseLength);
 
 protected:
-    void updateState();
 
     uint8_t _pin;
     PIO _pio;
@@ -61,6 +88,10 @@ protected:
     double _minCX = -0.5;
     double _maxCY = 0.5;
     double _minCY = -0.5;
+    double _maxL = 0.5;
+    double _minL = -0.5;
+    double _maxR = 0.5;
+    double _minR = -0.5;
 };
 
 

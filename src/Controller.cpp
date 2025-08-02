@@ -1,10 +1,9 @@
-// #include "pico/stdlib.h"
+#include <Arduino.h>
 #include "Controller.h"
 #include "Controller.pio.h"
+#include "pico/bootrom.h"
 
 Controller::Controller(InitParams *initParams, uint8_t sizeofControllerState) {
-    initPio(initParams);
-
     _pin = initParams->pin;
     _pio = initParams->pio;
     _sm = initParams->sm;
@@ -20,7 +19,8 @@ void Controller::initPio(InitParams *initParams) {
     if (!pio_can_add_program(pios[pio_index], &controller_program)) {
         pio_index = 1;
         if (!pio_can_add_program(pios[pio_index], &controller_program)) {
-            throw 0;
+            // temp for development, reset the board if no PIO is available
+            reset_usb_boot(0, 0);
         }
     }
     initParams->pio = pios[pio_index];
@@ -52,7 +52,7 @@ void Controller::transfer(PIO pio, uint sm, uint8_t *request,
     pio_sm_put_blocking(pio, sm, ((responseLength - 1) & 0x1F) << 24);
     sendRequest(pio, sm, request, requestLength);
     getResponse(pio, sm, response, responseLength);
-    busy_wait_us(4 * (requestLength + responseLength) + 450);
+    delayMicroseconds(4 * (requestLength + responseLength) + 450);
 }
 
 void Controller::sendRequest(PIO pio, uint sm, uint8_t *request,
@@ -69,13 +69,13 @@ void Controller::getResponse(PIO pio, uint sm, uint8_t *response,
                              uint8_t responseLength) {
     int16_t remainingResponseBytes = responseLength;
     while (remainingResponseBytes > 0) {
-        absolute_time_t timeout_us = make_timeout_time_us(600);
+        unsigned long timeout_us = micros() + 600;
         bool timedOut = false;
         while (pio_sm_is_rx_fifo_empty(pio, sm) && !timedOut) {
-            timedOut = time_reached(timeout_us);
+            timedOut = micros() > timeout_us;
         }
         if (timedOut) {
-            throw 0;
+            return; // Timeout occurred
         }
         uint32_t data = pio_sm_get(pio, sm);
         response[responseLength - remainingResponseBytes] = (uint8_t) (data & 0xFF);
@@ -101,13 +101,17 @@ void Controller::updateState() {
     uint8_t request[3] = {0x40, 0x03, setRumble};
     transfer(request, sizeof(request), _controllerState, _sizeofControllerState);
 
-#ifdef DEBUG_MODE
-  if (
-    (GC_MASK_L & _controllerState[1]) &&
-    (GC_MASK_R & _controllerState[1]) &&
-    (GC_MASK_START & _controllerState[0])
-  ) {
-    reset_usb_boot(0, 0);
-  }
-#endif
+    // #ifdef DEBUG_MODE
+    if (
+        (GC_MASK_L & _controllerState[1]) &&
+        (GC_MASK_R & _controllerState[1]) &&
+        (GC_MASK_START & _controllerState[0]) &&
+        (_controllerState[0] & GC_MASK_A) &&
+        (_controllerState[0] & GC_MASK_B) &&
+        (_controllerState[0] & GC_MASK_X) &&
+        (_controllerState[0] & GC_MASK_Y)
+    ) {
+        reset_usb_boot(0, 0);
+    }
+    // #endif
 }

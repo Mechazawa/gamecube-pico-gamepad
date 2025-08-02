@@ -12,9 +12,12 @@ int val;
 Controller *controller = nullptr;
 
 void setup() {
-    Serial.begin(115200);
+    auto *initParams = new InitParams();
+    initParams->pin = 10;
 
-    controller = new Controller(new InitParams{.pin = 10});
+    Controller::initPio(initParams);
+
+    controller = new Controller(initParams, 8);
     controller->init();
 
     // pinMode(LED_BUILTIN, OUTPUT);
@@ -28,12 +31,17 @@ void setup() {
     // pinMode(28, INPUT_PULLUP);
 }
 
-void loop() {
+uint16_t scaleAnalog(const double value) {
+    return static_cast<uint16_t>((value * 2 * 32767) - 32767);
+}
 
-    // Get input value from Pico analog pin
+void loop() {
+    controller->updateState();
+
+    // // Get input value from Pico analog pin
     // val = analogRead(26);
     //
-    // // Map analog 0-1023 value from pin to max HID range -32767 - 32767
+    // // // Map analog 0-1023 value from pin to max HID range -32767 - 32767
     // val = map(val, 0, 1023, -32767, 32767);
     //
     // // Send value to HID object
@@ -43,8 +51,6 @@ void loop() {
     // val = analogRead(27);
     // val = map(val, 0, 1023, -32767, 32767);
     // gamepad.SetY(val);
-
-
 
     // Other Axis Options
     /* BY INDEX 0-15 */
@@ -67,23 +73,66 @@ void loop() {
     // gamepad.SetVno(val);
     // gamepad.SetUndefined(val);
 
-    // Set button 0 of 128 by reading button on digital pin 28
-    // gamepad.SetButton(0, !digitalRead(28));
+    const uint8_t *controllerState = controller->getControllerState();
+
+    // Buttons
+    gamepad.SetButton(0, controllerState[0] & GC_MASK_START);
+    gamepad.SetButton(1, controllerState[0] & GC_MASK_A);
+    gamepad.SetButton(2, controllerState[0] & GC_MASK_B);
+    gamepad.SetButton(3, controllerState[0] & GC_MASK_X);
+    gamepad.SetButton(4, controllerState[0] & GC_MASK_Y);
+    gamepad.SetButton(5, controllerState[1] & GC_MASK_L);
+    gamepad.SetButton(6, controllerState[1] & GC_MASK_R);
+    gamepad.SetButton(7, controllerState[1] & GC_MASK_Z);
 
     // Set hat direction, 4 hats available. direction is clockwise 0=N 1=NE 2=E 3=SE 4=S 5=SW 6=W 7=NW 8=CENTER
-    // gamepad.SetHat(0, 8);
+    switch (GC_MASK_DPAD & controllerState[1]) {
+        case GC_MASK_DPAD_UP:
+            gamepad.SetHat(0, HAT_DIR_N);
+            break;
+        case GC_MASK_DPAD_UPRIGHT:
+            gamepad.SetHat(0, HAT_DIR_NE);
+            break;
+        case GC_MASK_DPAD_RIGHT:
+            gamepad.SetHat(0, HAT_DIR_E);
+            break;
+        case GC_MASK_DPAD_DOWNRIGHT:
+            gamepad.SetHat(0, HAT_DIR_SE);
+            break;
+        case GC_MASK_DPAD_DOWN:
+            gamepad.SetHat(0, HAT_DIR_S);
+            break;
+        case GC_MASK_DPAD_DOWNLEFT:
+            gamepad.SetHat(0, HAT_DIR_SW);
+            break;
+        case GC_MASK_DPAD_LEFT:
+            gamepad.SetHat(0, HAT_DIR_W);
+            break;
+        case GC_MASK_DPAD_UPLEFT:
+            gamepad.SetHat(0, HAT_DIR_NW);
+            break;
+        default:
+            gamepad.SetHat(0, HAT_DIR_C);
+            break;
+    }
+
+    gamepad.SetX(scaleAnalog(controller->getX()));
+    gamepad.SetY(scaleAnalog(controller->getY()));
+    gamepad.SetZ(scaleAnalog(controller->getL()));
+    gamepad.SetRx(scaleAnalog(controller->getCX()));
+    gamepad.SetRy(scaleAnalog(controller->getCY()));
+    gamepad.SetRz(scaleAnalog(controller->getR()));
 
     // gamepad.SetButton(0, controller.)
 
     // Send all inputs via HID
-    // Nothing is send to your computer until this is called.
+    // Nothing is sent to your computer until this is called.
     gamepad.send_update();
 
     // Flash the LED just for fun
     // digitalWrite(LED_BUILTIN, !digitalRead(LED_BUILTIN));
-    delay(100);
+    delay(10);
 }
-
 
 
 // void GamecubeController::getXboxReport(XboxReport *xboxReport) {
@@ -147,4 +196,3 @@ void loop() {
 //
 //   return;
 // }
-
