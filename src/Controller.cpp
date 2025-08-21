@@ -37,7 +37,6 @@ void Controller::initPio(InitParams *initParams) {
     uint8_t initResponse[3] = {0x00};
     transfer(initParams->pio, initParams->sm, initRequest, sizeof(initRequest),
              initResponse, sizeof(initResponse));
-    initParams->controllerType = (ControllerType) initResponse[0];
 }
 
 void Controller::transfer(uint8_t *request, uint8_t requestLength,
@@ -81,13 +80,6 @@ void Controller::getResponse(PIO pio, uint sm, uint8_t *response,
         response[responseLength - remainingResponseBytes] = (uint8_t) (data & 0xFF);
         remainingResponseBytes--;
     }
-}
-
-double Controller::getScaledAnalogAxis(double axisPos, double *minAxis,
-                                       double *maxAxis) {
-    *maxAxis = axisPos > *maxAxis ? axisPos : *maxAxis;
-    *minAxis = axisPos < *minAxis ? axisPos : *minAxis;
-    return axisPos > 0 ? axisPos / *maxAxis : -axisPos / *minAxis;
 }
 
 void Controller::init() {
