@@ -1,5 +1,7 @@
 #pragma once
 
+#include <climits>
+
 #define GC_JOYSTICK_MIN 0x00
 #define GC_JOYSTICK_MID 0x80
 #define GC_JOYSTICK_MAX 0xFF
@@ -25,14 +27,8 @@
 #define GC_MASK_DPAD_LEFT 0x1
 #define GC_MASK_DPAD_UPLEFT 0x9
 
-
-#define DEFAULT_ANALOG_CONTROLLER_SCALE_MIN (-0.01)
-#define DEFAULT_ANALOG_CONTROLLER_SCALE_MAX 0.01
-#include <limits.h>
-
 class AnalogScaler
 {
-private:
     bool _dirty = false;
 
 public:
@@ -49,7 +45,7 @@ public:
         max = value > max ? value : max;
         min = value < min ? value : min;
 
-        unsigned short u = (value - min) * (USHRT_MAX / (max - min));
+        const unsigned short u = (value - min) * (USHRT_MAX / (max - min));
 
         return static_cast<short>(static_cast<int>(u) + SHRT_MIN);
     }
@@ -60,23 +56,21 @@ public:
     }
 };
 
-typedef struct {
+struct ScalerBundle
+{
     AnalogScaler ax;
     AnalogScaler ay;
     AnalogScaler cx;
     AnalogScaler cy;
     AnalogScaler al;
     AnalogScaler ar;
-} ScalerBundle;
+};
 
 class ControllerState
 {
 public:
     unsigned char* state = {};
     ScalerBundle scalers;
-
-    // explicit ControllerState(Controller* controller, ScalerBundle scalers = ScalerBundle())
-    //     : state(controller->getRawControllerState()), scalers(scalers) {};
 
     explicit ControllerState(unsigned char state[8], ScalerBundle scalers = ScalerBundle())
         : state(state), scalers(scalers) {};
