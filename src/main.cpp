@@ -1,12 +1,13 @@
 #include <Arduino.h>
 
-#include <PicoGamepad.h>
+// #include <PicoGamepad.h>
 
 #include "Controller.h"
 #include "ControllerState.h"
+#include "GamecubeHID.h"
 #include "pico/bootrom.h"
 
-PicoGamepad gamepad;
+GamecubeHID gamepad;
 Controller* controller = nullptr;
 ControllerState* state = nullptr;
 
@@ -27,29 +28,61 @@ void loop()
 {
     controller->updateState();
 
-    // Buttons
-    gamepad.SetButton(0, state->start());
-    gamepad.SetButton(1, state->a());
-    gamepad.SetButton(2, state->b());
-    gamepad.SetButton(3, state->x());
-    gamepad.SetButton(4, state->y());
-    gamepad.SetButton(5, state->l());
-    gamepad.SetButton(6, state->r());
-    gamepad.SetButton(7, state->z());
+    // // Buttons
+    // gamepad.SetButton(0, state->start());
+    // gamepad.SetButton(1, state->a());
+    // gamepad.SetButton(2, state->b());
+    // gamepad.SetButton(3, state->x());
+    // gamepad.SetButton(4, state->y());
+    // gamepad.SetButton(5, state->l());
+    // gamepad.SetButton(6, state->r());
+    // gamepad.SetButton(7, state->z());
+    //
+    // // DPad
+    // gamepad.SetButton(8, state->dpadUp());
+    // gamepad.SetButton(9, state->dpadRight());
+    // gamepad.SetButton(10, state->dpadDown());
+    // gamepad.SetButton(11, state->dpadLeft());
+    //
+    // // Analog values
+    // gamepad.SetX(state->ax());
+    // gamepad.SetY(state->ay());
+    // gamepad.SetZ(state->al());
+    // gamepad.SetRx(state->cx());
+    // gamepad.SetRy(state->cy());
+    // gamepad.SetRz(state->ar());
+    //
+    //
+    // gamepad.send_update();
 
-    // DPad
-    gamepad.SetButton(8, state->dpadUp());
-    gamepad.SetButton(9, state->dpadRight());
-    gamepad.SetButton(10, state->dpadDown());
-    gamepad.SetButton(11, state->dpadLeft());
+    gamepad.setLX(state->ax());
+    gamepad.setLY(state->ay());
+    gamepad.setCX(state->cx());
+    gamepad.setCY(state->cy());
 
-    // Analog values
-    gamepad.SetX(state->ax());
-    gamepad.SetY(state->ay());
-    gamepad.SetZ(state->al());
-    gamepad.SetRx(state->cx());
-    gamepad.SetRy(state->cy());
-    gamepad.SetRz(state->ar());
+    gamepad.setLT(state->al());
+    gamepad.setRT(state->ar());
+
+    gamepad.setButton(GamecubeHID::START, state->start());
+    gamepad.setButton(GamecubeHID::A, state->a());
+    gamepad.setButton(GamecubeHID::B, state->b());
+    gamepad.setButton(GamecubeHID::X, state->x());
+    gamepad.setButton(GamecubeHID::Y, state->y());
+    gamepad.setButton(GamecubeHID::L, state->l());
+    gamepad.setButton(GamecubeHID::R, state->r());
+    gamepad.setButton(GamecubeHID::Z, state->z());
+
+    gamepad.setDpad(
+        state->dpadUp(),
+        state->dpadRight(),
+        state->dpadDown(),
+        state->dpadLeft()
+    );
+
+    if (gamepad.pollRumble()) {
+        // Rumble changed, update controller state
+        controller->setRumble(gamepad.rumble());
+    }
 
     if (
         state->a() &&
@@ -62,6 +95,6 @@ void loop()
         reset_usb_boot(0, 0);
     }
 
-    gamepad.send_update();
+    gamepad.send();
     delay(10);
 }
