@@ -28,6 +28,7 @@
 
 #define DEFAULT_ANALOG_CONTROLLER_SCALE_MIN (-0.01)
 #define DEFAULT_ANALOG_CONTROLLER_SCALE_MAX 0.01
+#include <limits.h>
 
 class AnalogScaler
 {
@@ -35,20 +36,22 @@ private:
     bool _dirty = false;
 
 public:
-    double min;
-    double max;
+    unsigned char min;
+    unsigned char max;
 
-    explicit AnalogScaler(const double min = DEFAULT_ANALOG_CONTROLLER_SCALE_MIN, const double max = DEFAULT_ANALOG_CONTROLLER_SCALE_MAX)
+    explicit AnalogScaler(const unsigned char min = UCHAR_MAX, const unsigned char max = 0)
         : min(min), max(max) {}
 
-    double scale(const double value)
+    short scale(const unsigned char value)
     {
         _dirty = _dirty || value > max || value < min;
 
         max = value > max ? value : max;
         min = value < min ? value : min;
 
-        return value > 0 ? value / max : -value / min;
+        unsigned short u = (value - min) * (USHRT_MAX / (max - min));
+
+        return static_cast<short>(static_cast<int>(u) + SHRT_MIN);
     }
 
     bool dirty() const
@@ -92,27 +95,27 @@ public:
     bool dpadDown() const { return state[1] & GC_MASK_DPAD & GC_MASK_DPAD_DOWN; }
     bool dpadLeft() const { return state[1] & GC_MASK_DPAD & GC_MASK_DPAD_LEFT; }
 
-    double ax() {
+    short ax() {
         return scalers.ax.scale(state[2]);
     }
 
-    double ay() {
+    short ay() {
         return scalers.ay.scale(state[3]);
     }
 
-    double cx() {
+    short cx() {
         return scalers.cx.scale(state[4]);
     }
 
-    double cy() {
+    short cy() {
         return scalers.cy.scale(state[5]);
     }
 
-    double al() {
+    short al() {
         return scalers.al.scale(state[6]);
     }
 
-    double ar() {
+    short ar() {
         return scalers.ar.scale(state[7]);
     }
 };

@@ -23,11 +23,6 @@ void setup()
     state = new ControllerState(controller->getRawControllerState());
 }
 
-inline uint16_t scaleAnalog(const double value)
-{
-    return static_cast<uint16_t>((value * 2 * 32767) - 32767);
-}
-
 void loop()
 {
     controller->updateState();
@@ -49,12 +44,12 @@ void loop()
     gamepad.SetButton(11, state->dpadLeft());
 
     // Analog values
-    gamepad.SetX(scaleAnalog(state->ax()));
-    gamepad.SetY(scaleAnalog(state->ay()));
-    gamepad.SetZ(scaleAnalog(state->al()));
-    gamepad.SetRx(scaleAnalog(state->cx()));
-    gamepad.SetRy(scaleAnalog(state->cy()));
-    gamepad.SetRz(scaleAnalog(state->ar()));
+    gamepad.SetX(state->ax());
+    gamepad.SetY(state->ay());
+    gamepad.SetZ(state->al());
+    gamepad.SetRx(state->cx());
+    gamepad.SetRy(state->cy());
+    gamepad.SetRz(state->ar());
 
     if (
         state->a() &&
