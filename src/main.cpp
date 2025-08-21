@@ -27,34 +27,6 @@ void setup()
 void loop()
 {
     controller->updateState();
-
-    // // Buttons
-    // gamepad.SetButton(0, state->start());
-    // gamepad.SetButton(1, state->a());
-    // gamepad.SetButton(2, state->b());
-    // gamepad.SetButton(3, state->x());
-    // gamepad.SetButton(4, state->y());
-    // gamepad.SetButton(5, state->l());
-    // gamepad.SetButton(6, state->r());
-    // gamepad.SetButton(7, state->z());
-    //
-    // // DPad
-    // gamepad.SetButton(8, state->dpadUp());
-    // gamepad.SetButton(9, state->dpadRight());
-    // gamepad.SetButton(10, state->dpadDown());
-    // gamepad.SetButton(11, state->dpadLeft());
-    //
-    // // Analog values
-    // gamepad.SetX(state->ax());
-    // gamepad.SetY(state->ay());
-    // gamepad.SetZ(state->al());
-    // gamepad.SetRx(state->cx());
-    // gamepad.SetRy(state->cy());
-    // gamepad.SetRz(state->ar());
-    //
-    //
-    // gamepad.send_update();
-
     gamepad.setLX(state->ax());
     gamepad.setLY(state->ay());
     gamepad.setCX(state->cx());
