@@ -1,5 +1,6 @@
 #include "GamecubeHID.h"
 #include <string.h>
+#include <usb_phy_api.h>
 
 // ---- HID Report Descriptor ----
 // 12 buttons -> 12 bits (+4 padding)
@@ -58,7 +59,7 @@ const uint8_t GamecubeHID::kReportDesc[] = { /* unused, keep symbol */ };
 
 GamecubeHID::GamecubeHID()
     // mbed USBHID ctor: (output_len, input_len, vendor_id, product_id, product_release)
-    : USBHID(/*out*/1, /*in*/sizeof(Report), /*vid*/0xCafe, /*pid*/0x4000, /*rel*/0x0001)
+    : USBHID(get_usb_phy(), sizeof(Report), 0, 0xCafe, 0x4000, 0x0001)
 {}
 
 void GamecubeHID::setButton(Button b, bool pressed) {

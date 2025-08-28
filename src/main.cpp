@@ -22,11 +22,15 @@ void setup()
     controller->init();
 
     state = new ControllerState(controller->getRawControllerState());
+
+    gamepad.init();
+    gamepad.connect();
 }
 
 void loop()
 {
     controller->updateState();
+
     gamepad.setLX(state->ax());
     gamepad.setLY(state->ay());
     gamepad.setCX(state->cx());
