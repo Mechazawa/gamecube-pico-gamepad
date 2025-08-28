@@ -1,13 +1,13 @@
 #include <Arduino.h>
 
-#include <PicoGamepad.h>
+// #include <PicoGamepad.h>
 
 #include "Controller.h"
 #include "ControllerState.h"
-// #include "GamecubeHID.h"
+#include "GamecubeHID.h"
 #include "pico/bootrom.h"
 
-PicoGamepad gamepad(true, 0xCafe, 0x4000, 0x0001);
+GamecubeHID gamepad;
 Controller* controller = nullptr;
 ControllerState* state = nullptr;
 
@@ -27,42 +27,35 @@ void setup()
 void loop()
 {
     controller->updateState();
-    
-    // Convert GameCube analog values (0-255) to PicoGamepad format (-32767 to 32767)
-    // GameCube center is 128, so we convert: (value - 128) * 256
-    gamepad.SetX((state->ax() - 128) * 256);
-    gamepad.SetY((state->ay() - 128) * 256);
-    gamepad.SetRx((state->cx() - 128) * 256);
-    gamepad.SetRy((state->cy() - 128) * 256);
+    gamepad.setLX(state->ax());
+    gamepad.setLY(state->ay());
+    gamepad.setCX(state->cx());
+    gamepad.setCY(state->cy());
 
-    // Triggers are 0-255, convert to 0-32767 for PicoGamepad
-    gamepad.SetZ(state->al() * 128);
-    gamepad.SetRz(state->ar() * 128);
+    gamepad.setLT(state->al());
+    gamepad.setRT(state->ar());
 
-    // Map GameCube buttons to PicoGamepad buttons
-    gamepad.SetButton(0, state->a());        // A button
-    gamepad.SetButton(1, state->b());        // B button  
-    gamepad.SetButton(2, state->x());        // X button
-    gamepad.SetButton(3, state->y());        // Y button
-    gamepad.SetButton(4, state->start());    // Start button
-    gamepad.SetButton(5, state->l());        // L button
-    gamepad.SetButton(6, state->r());        // R button
-    gamepad.SetButton(7, state->z());        // Z button
+    gamepad.setButton(GamecubeHID::START, state->start());
+    gamepad.setButton(GamecubeHID::A, state->a());
+    gamepad.setButton(GamecubeHID::B, state->b());
+    gamepad.setButton(GamecubeHID::X, state->x());
+    gamepad.setButton(GamecubeHID::Y, state->y());
+    gamepad.setButton(GamecubeHID::L, state->l());
+    gamepad.setButton(GamecubeHID::R, state->r());
+    gamepad.setButton(GamecubeHID::Z, state->z());
 
-    // Map D-pad to hat switch (0=N, 2=E, 4=S, 6=W, 8=Center)
-    uint8_t hatDir = HAT_DIR_C; // Default to center
-    if (state->dpadUp() && !state->dpadRight() && !state->dpadDown() && !state->dpadLeft()) hatDir = HAT_DIR_N;
-    else if (state->dpadUp() && state->dpadRight() && !state->dpadDown() && !state->dpadLeft()) hatDir = HAT_DIR_NE;
-    else if (!state->dpadUp() && state->dpadRight() && !state->dpadDown() && !state->dpadLeft()) hatDir = HAT_DIR_E;
-    else if (!state->dpadUp() && state->dpadRight() && state->dpadDown() && !state->dpadLeft()) hatDir = HAT_DIR_SE;
-    else if (!state->dpadUp() && !state->dpadRight() && state->dpadDown() && !state->dpadLeft()) hatDir = HAT_DIR_S;
-    else if (!state->dpadUp() && !state->dpadRight() && state->dpadDown() && state->dpadLeft()) hatDir = HAT_DIR_SW;
-    else if (!state->dpadUp() && !state->dpadRight() && !state->dpadDown() && state->dpadLeft()) hatDir = HAT_DIR_W;
-    else if (state->dpadUp() && !state->dpadRight() && !state->dpadDown() && state->dpadLeft()) hatDir = HAT_DIR_NW;
-    
-    gamepad.SetHat(0, hatDir);
+    gamepad.setDpad(
+        state->dpadUp(),
+        state->dpadRight(),
+        state->dpadDown(),
+        state->dpadLeft()
+    );
 
-    // Check for bootloader reset combo
+    if (gamepad.pollRumble()) {
+        // Rumble changed, update controller state
+        controller->setRumble(gamepad.rumble());
+    }
+
     if (
         state->a() &&
         state->b() &&
@@ -74,6 +67,6 @@ void loop()
         reset_usb_boot(0, 0);
     }
 
-    gamepad.send_update();
+    gamepad.send();
     delay(10);
 }
