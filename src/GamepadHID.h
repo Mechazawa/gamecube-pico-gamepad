@@ -1,97 +1,73 @@
 #pragma once
 
-#include "USBHID.h"
-// #include "mbed.h"
+#include <Arduino.h>
+#include <Joystick.h>
 
-// using namespace mbed;
+class GamepadHID {
+private:
+    bool _initialized = false;
+    uint32_t _lastSendTime = 0;
+    static const uint32_t MIN_SEND_INTERVAL = 8; // 8ms = ~125Hz max
 
-class GamepadHID : public USBHID {
 public:
-
-  // Report descriptor:
-  virtual const uint8_t *report_desc() {
-    static const uint8_t desc[] = {
-      0x05, 0x01,                    // Usage Page (Generic Desktop)
-      0x09, 0x05,                    // Usage (Game Pad)
-      0xA1, 0x01,                    // Collection (Application)
-
-      // -------- Input Report (ID 1) --------
-      0x85, 0x01,                    //   Report ID (1)
-
-      // 12 Buttons (+4 bits padding)
-      0x05, 0x09,                    //   Usage Page (Button)
-      0x19, 0x01,                    //   Usage Min (1)
-      0x29, 0x0C,                    //   Usage Max (12)
-      0x15, 0x00,                    //   Logical Min (0)
-      0x25, 0x01,                    //   Logical Max (1)
-      0x95, 0x0C,                    //   Report Count (12)
-      0x75, 0x01,                    //   Report Size (1)
-      0x81, 0x02,                    //   Input (Data,Var,Abs)
-      0x95, 0x04,                    //   Report Count (4)
-      0x75, 0x01,                    //   Report Size (1)
-      0x81, 0x03,                    //   Input (Const,Var,Abs) // padding
-
-      // 6 Axes: X,Y,Z,Rx,Ry,Rz — all 0..255
-      0x05, 0x01,                    //   Usage Page (Generic Desktop)
-      0x09, 0x30,                    //   Usage (X)
-      0x09, 0x31,                    //   Usage (Y)
-      0x09, 0x32,                    //   Usage (Z)   -> Right X
-      0x09, 0x33,                    //   Usage (Rx)  -> LT
-      0x09, 0x34,                    //   Usage (Ry)  -> RT
-      0x09, 0x35,                    //   Usage (Rz)  -> Right Y
-      0x15, 0x00,                    //   Logical Min (0)
-      0x26, 0xFF, 0x00,              //   Logical Max (255)
-      0x75, 0x08,                    //   Report Size (8)
-      0x95, 0x06,                    //   Report Count (6)
-      0x81, 0x02,                    //   Input (Data,Var,Abs)
-
-      // -------- Output Report (ID 2) for Rumble On/Off --------
-      0x85, 0x02,                    //   Report ID (2)
-      0x06, 0x00, 0xFF,              //   Usage Page (Vendor-defined 0xFF00)
-      0x09, 0x01,                    //   Usage (0x01)
-      0x15, 0x00,                    //   Logical Min (0)
-      0x25, 0x01,                    //   Logical Max (1)
-      0x75, 0x08,                    //   Report Size (8)
-      0x95, 0x01,                    //   Report Count (1)
-      0x91, 0x02,                    //   Output (Data,Var,Abs)
-
-      0xC0                           // End Collection
-    };
-
-    reportLength = sizeof(desc);
-
-    return desc;
-  }
-
-  // Send current state (buttons + axes)
-  bool sendState(const uint16_t buttons,
-                 const uint8_t x, const uint8_t y,
-                 const uint8_t z, const uint8_t rx,
-                 const uint8_t ry, const uint8_t rz) {
-    HID_REPORT rep;
-    rep.length = 1 + 2 + 6; // ID + buttons(2) + axes(6) = 9
-    rep.data[0] = 0x01;     // Report ID 1
-    rep.data[1] = buttons & 0xFF;
-    rep.data[2] = (buttons >> 8) & 0xFF;
-    rep.data[3] = x;
-    rep.data[4] = y;
-    rep.data[5] = z;
-    rep.data[6] = rx;
-    rep.data[7] = ry;
-    rep.data[8] = rz;
-
-    return send(&rep);
-  }
-
-  // Poll OUT reports (rumble)
-  bool pollRumble(bool &on) {
-    HID_REPORT out{};
-    if (read_nb(&out)) {
-      if (out.length >= 2 && out.data[0] == 0x02) { // Report ID 2
-        on = (out.data[1] != 0);
-        return true;
-      }
+    GamepadHID() = default;
+    
+    void init() {
+        if (!_initialized) {
+            Joystick.begin();
+            // Use manual send to control timing
+            Joystick.useManualSend(true);
+            _initialized = true;
+        }
     }
-    return false;
-  }
+    
+    void connect() {
+        // Auto-connects with Arduino-Pico
+    }
+    
+    void wait_ready() {
+        // Not needed with Arduino-Pico
+    }
+    
+    // Send current state (buttons + axes) with rate limiting
+    bool sendState(const uint16_t buttons,
+                   const uint8_t x, const uint8_t y,
+                   const uint8_t z, const uint8_t rx,
+                   const uint8_t ry, const uint8_t rz) {
+        
+        if (!_initialized) {
+            return false;
+        }
+
+        // Rate limiting to prevent overwhelming USB stack
+        uint32_t now = millis();
+        if (now - _lastSendTime < MIN_SEND_INTERVAL) {
+            return true; // Skip but return success
+        }
+        _lastSendTime = now;
+
+        // Map GameCube buttons to joystick buttons
+        // GameCube: Start, A, B, X, Y, L, R, Z (8 buttons)
+        for (int i = 0; i < 8; i++) {
+            Joystick.setButton(i, (buttons & (1 << i)) != 0);
+        }
+
+        // Map axes (convert from 0-255 to joystick range)
+        // Arduino-Pico Joystick expects 0-1023 by default
+        Joystick.X(x * 4);                // Left stick X (0-1023)  
+        Joystick.Y(y * 4);                // Left stick Y (0-1023)
+        Joystick.Z(z * 4);                // Right stick X (0-1023)
+        Joystick.Zrotate(rz * 4);         // Right stick Y (0-1023) 
+        Joystick.sliderLeft(rx * 4);      // Left trigger (0-1023)
+        Joystick.sliderRight(ry * 4);     // Right trigger (0-1023)
+
+        // Send the report
+        Joystick.send_now();
+        return true;
+    }
+    
+    // Poll OUT reports (rumble) - not implemented yet
+    bool pollRumble(bool &on) {
+        return false; // Use fallback rumble for now
+    }
 };

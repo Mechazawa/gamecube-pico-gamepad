@@ -1,11 +1,8 @@
 #include <Arduino.h>
 
-// #include <PicoGamepad.h>
-
 #include "Controller.h"
 #include "ControllerState.h"
 #include "GamepadHID.h"
-#include "pico/bootrom.h"
 
 GamepadHID gamepad;
 Controller* controller = nullptr;
@@ -25,8 +22,19 @@ void setup()
 
     gamepad.init();
     gamepad.connect();
-
+    
+    // Give USB time to enumerate
+    delay(2000);
+    
     gamepad.wait_ready();
+
+    // Send test HID report to trigger gamepad detection
+    for (int i = 0; i < 5; i++) {
+        gamepad.sendState(0x0001, 128, 128, 128, 0, 0, 128); // Button 1 pressed
+        delay(100);
+        gamepad.sendState(0x0000, 128, 128, 128, 0, 0, 128); // No buttons
+        delay(100);
+    }
 
     controller->setRumble(true);
     controller->updateState();
@@ -56,6 +64,7 @@ void loop()
         (state->r() << 6) |
         (state->z() << 7);
 
+    // Send HID report every loop iteration
     gamepad.sendState(
         buttons,
         lx,
@@ -66,14 +75,14 @@ void loop()
         ry /*Rz (Right Y)*/
     );
 
-    // // Handle rumble OUT report
-    // bool rumbleOn;
-    // if (gamepad.pollRumble(rumbleOn))
-    // {
-    //     controller->setRumble(rumbleOn);
-    // }
-
-    controller->setRumble(state->start() && state->a());
+    // Handle rumble from HID OUT reports (host-controlled)
+    bool rumbleOn;
+    if (gamepad.pollRumble(rumbleOn)) {
+        controller->setRumble(rumbleOn);
+    } else {
+        // Fallback: manual rumble control (Start+A)
+        controller->setRumble(state->start() && state->a());
+    }
 
     if (
         state->a() &&
@@ -83,7 +92,7 @@ void loop()
         state->start()
     )
     {
-        reset_usb_boot(0, 0);
+        rp2040.reboot();
     }
 
     delay(10);
