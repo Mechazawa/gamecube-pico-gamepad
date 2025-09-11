@@ -28,17 +28,10 @@ void setup()
     
     gamepad.wait_ready();
 
-    // Send test HID report to trigger gamepad detection
-    for (int i = 0; i < 5; i++) {
-        gamepad.sendState(0x0001, 128, 128, 128, 0, 0, 128); // Button 1 pressed
-        delay(100);
-        gamepad.sendState(0x0000, 128, 128, 128, 0, 0, 128); // No buttons
-        delay(100);
-    }
-
     controller->setRumble(true);
     controller->updateState();
     delay(200);
+    controller->setRumble(false);
 }
 
 void loop()
@@ -63,6 +56,10 @@ void loop()
         (state->l() << 5) |
         (state->r() << 6) |
         (state->z() << 7);
+        // (state->dpadUp() << (8 + 4)) |
+        // (state->dpadRight() << (9 + 4)) |
+        // (state->dpadDown() << (10 + 4)) |
+        // (state->dpadLeft() << (11 + 4));
 
     // Send HID report every loop iteration
     gamepad.sendState(
@@ -76,13 +73,13 @@ void loop()
     );
 
     // Handle rumble from HID OUT reports (host-controlled)
-    bool rumbleOn;
-    if (gamepad.pollRumble(rumbleOn)) {
-        controller->setRumble(rumbleOn);
-    } else {
-        // Fallback: manual rumble control (Start+A)
-        controller->setRumble(state->start() && state->a());
-    }
+    // bool rumbleOn;
+    // if (gamepad.pollRumble(rumbleOn)) {
+    //     controller->setRumble(rumbleOn);
+    // } else {
+    //     // Fallback: manual rumble control (Start+A)
+    //     // controller->setRumble(state->start() && state->a());
+    // }
 
     if (
         state->a() &&
