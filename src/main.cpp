@@ -23,39 +23,11 @@ void setup()
 
     state = new ControllerState(controller->getRawControllerState());
 
-    // gamepad.init();
     gamepad.connect();
 }
 
 void loop()
 {
-    // controller->updateState();
-
-    // gamepad.setLX(state->ax());
-    // gamepad.setLY(state->ay());
-    // gamepad.setCX(state->cx());
-    // gamepad.setCY(state->cy());
-    //
-    // gamepad.setLT(state->al());
-    // gamepad.setRT(state->ar());
-    //
-    // gamepad.setButton(GamecubeHID::START, state->start());
-    // gamepad.setButton(GamecubeHID::A, state->a());
-    // gamepad.setButton(GamecubeHID::B, state->b());
-    // gamepad.setButton(GamecubeHID::X, state->x());
-    // gamepad.setButton(GamecubeHID::Y, state->y());
-    // gamepad.setButton(GamecubeHID::L, state->l());
-    // gamepad.setButton(GamecubeHID::R, state->r());
-    // gamepad.setButton(GamecubeHID::Z, state->z());
-    //
-    // // Note the DPad is not a hat and allows multiple directions to be pressed at once
-    // gamepad.setDpad(
-    //     state->dpadUp(),
-    //     state->dpadRight(),
-    //     state->dpadDown(),
-    //     state->dpadLeft()
-    // );
-
     uint8_t lx = state->ax();
     uint8_t ly = state->ay();
     uint8_t rx = state->cx();
@@ -92,11 +64,6 @@ void loop()
         controller->setRumble(rumbleOn);
     }
 
-    // if (gamepad.pollRumble()) {
-    //     // Rumble changed, update controller state
-    //     controller->setRumble(gamepad.rumble());
-    // }
-
     if (
         state->a() &&
         state->b() &&
@@ -108,6 +75,6 @@ void loop()
         reset_usb_boot(0, 0);
     }
 
-    // gamepad.send();
+    // gamepad.sen();
     delay(10);
 }
