@@ -75,6 +75,5 @@ void loop()
         reset_usb_boot(0, 0);
     }
 
-    // gamepad.sen();
     delay(10);
 }
