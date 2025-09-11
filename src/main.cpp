@@ -23,11 +23,20 @@ void setup()
 
     state = new ControllerState(controller->getRawControllerState());
 
+    gamepad.init();
     gamepad.connect();
+
+    gamepad.wait_ready();
+
+    controller->setRumble(true);
+    controller->updateState();
+    delay(200);
 }
 
 void loop()
 {
+    controller->updateState();
+
     uint8_t lx = state->ax();
     uint8_t ly = state->ay();
     uint8_t rx = state->cx();
@@ -57,12 +66,14 @@ void loop()
         ry /*Rz (Right Y)*/
     );
 
-    // Handle rumble OUT report
-    bool rumbleOn;
-    if (gamepad.pollRumble(rumbleOn))
-    {
-        controller->setRumble(rumbleOn);
-    }
+    // // Handle rumble OUT report
+    // bool rumbleOn;
+    // if (gamepad.pollRumble(rumbleOn))
+    // {
+    //     controller->setRumble(rumbleOn);
+    // }
+
+    controller->setRumble(state->start() && state->a());
 
     if (
         state->a() &&

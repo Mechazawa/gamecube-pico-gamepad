@@ -27,53 +27,13 @@
 #define GC_MASK_DPAD_LEFT 0x1
 #define GC_MASK_DPAD_UPLEFT 0x9
 
-class AnalogScaler
-{
-    bool _dirty = false;
-
-public:
-    unsigned char min;
-    unsigned char max;
-
-    explicit AnalogScaler(const unsigned char min = UCHAR_MAX, const unsigned char max = 0)
-        : min(min), max(max) {}
-
-    short scale(const unsigned char value)
-    {
-        _dirty = _dirty || value > max || value < min;
-
-        max = value > max ? value : max;
-        min = value < min ? value : min;
-
-        const unsigned short u = (value - min) * (USHRT_MAX / (max - min));
-
-        return static_cast<short>(static_cast<int>(u) + SHRT_MIN);
-    }
-
-    bool dirty() const
-    {
-        return _dirty;
-    }
-};
-
-struct ScalerBundle
-{
-    AnalogScaler ax;
-    AnalogScaler ay;
-    AnalogScaler cx;
-    AnalogScaler cy;
-    AnalogScaler al;
-    AnalogScaler ar;
-};
-
 class ControllerState
 {
 public:
     unsigned char* state = {};
-    ScalerBundle scalers;
 
-    explicit ControllerState(unsigned char state[8], ScalerBundle scalers = ScalerBundle())
-        : state(state), scalers(scalers) {};
+    explicit ControllerState(unsigned char state[8])
+        : state(state) {};
 
     bool start() const { return state[0] & GC_MASK_START; }
     bool a() const { return state[0] & GC_MASK_A; }
@@ -89,27 +49,33 @@ public:
     bool dpadDown() const { return state[1] & GC_MASK_DPAD & GC_MASK_DPAD_DOWN; }
     bool dpadLeft() const { return state[1] & GC_MASK_DPAD & GC_MASK_DPAD_LEFT; }
 
-    short ax() {
-        return scalers.ax.scale(state[2]);
+    unsigned char ax() const
+    {
+        return state[2];
     }
 
-    short ay() {
-        return scalers.ay.scale(state[3]);
+    unsigned char ay() const
+    {
+        return state[3];
     }
 
-    short cx() {
-        return scalers.cx.scale(state[4]);
+    unsigned char cx() const
+    {
+        return state[4];
     }
 
-    short cy() {
-        return scalers.cy.scale(state[5]);
+    unsigned char cy() const
+    {
+        return state[5];
     }
 
-    short al() {
-        return scalers.al.scale(state[6]);
+    unsigned char al() const
+    {
+        return state[6];
     }
 
-    short ar() {
-        return scalers.ar.scale(state[7]);
+    unsigned char ar() const
+    {
+        return state[7];
     }
 };

@@ -7,9 +7,6 @@
 
 class GamepadHID : public USBHID {
 public:
-  // GamepadHID() : USBHID(get_usb_phy()) {
-  //   connect();
-  // }
 
   // Report descriptor:
   virtual const uint8_t *report_desc() {
@@ -60,15 +57,18 @@ public:
 
       0xC0                           // End Collection
     };
+
+    reportLength = sizeof(desc);
+
     return desc;
   }
 
   // Send current state (buttons + axes)
-  void sendState(uint16_t buttons,
-                 uint8_t x, uint8_t y,
-                 uint8_t z, uint8_t rx,
-                 uint8_t ry, uint8_t rz) {
-    HID_REPORT rep{};
+  bool sendState(const uint16_t buttons,
+                 const uint8_t x, const uint8_t y,
+                 const uint8_t z, const uint8_t rx,
+                 const uint8_t ry, const uint8_t rz) {
+    HID_REPORT rep;
     rep.length = 1 + 2 + 6; // ID + buttons(2) + axes(6) = 9
     rep.data[0] = 0x01;     // Report ID 1
     rep.data[1] = buttons & 0xFF;
@@ -79,7 +79,8 @@ public:
     rep.data[6] = rx;
     rep.data[7] = ry;
     rep.data[8] = rz;
-    send(&rep);
+
+    return send(&rep);
   }
 
   // Poll OUT reports (rumble)
