@@ -1,6 +1,6 @@
 #pragma once
 
-#include <climits>
+#include <Joystick.h>
 
 #define GC_JOYSTICK_MIN 0x00
 #define GC_JOYSTICK_MID 0x80
@@ -48,6 +48,21 @@ public:
     bool dpadRight() const { return state[1] & GC_MASK_DPAD & GC_MASK_DPAD_RIGHT; }
     bool dpadDown() const { return state[1] & GC_MASK_DPAD & GC_MASK_DPAD_DOWN; }
     bool dpadLeft() const { return state[1] & GC_MASK_DPAD & GC_MASK_DPAD_LEFT; }
+
+    HID_Joystick::HatPosition dpad() const
+    {
+        switch (state[1] & GC_MASK_DPAD) {
+            case GC_MASK_DPAD_UP: return HID_Joystick::UP;
+            case GC_MASK_DPAD_UPRIGHT: return HID_Joystick::UP_RIGHT;
+            case GC_MASK_DPAD_RIGHT: return HID_Joystick::RIGHT;
+            case GC_MASK_DPAD_DOWNRIGHT: return HID_Joystick::DOWN_RIGHT;
+            case GC_MASK_DPAD_DOWN: return HID_Joystick::DOWN;
+            case GC_MASK_DPAD_DOWNLEFT: return HID_Joystick::DOWN_LEFT;
+            case GC_MASK_DPAD_LEFT: return HID_Joystick::LEFT;
+            case GC_MASK_DPAD_UPLEFT: return HID_Joystick::UP_LEFT;
+            default: return HID_Joystick::IDLE;
+        }
+    }
 
     unsigned char ax() const
     {

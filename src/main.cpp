@@ -2,15 +2,13 @@
 
 #include "Controller.h"
 #include "ControllerState.h"
-#include "GamepadHID.h"
+#include <Joystick.h>
 
-GamepadHID gamepad;
-Controller* controller = nullptr;
-ControllerState* state = nullptr;
+Controller *controller = nullptr;
+ControllerState *state = nullptr;
 
-void setup()
-{
-    auto* initParams = new InitParams();
+void setup() {
+    auto *initParams = new InitParams();
     initParams->pin = 10;
 
     Controller::initPio(initParams);
@@ -20,13 +18,11 @@ void setup()
 
     state = new ControllerState(controller->getRawControllerState());
 
-    gamepad.init();
-    gamepad.connect();
-    
+    Joystick.begin();
+    Joystick.useManualSend(true);
+
     // Give USB time to enumerate
     delay(2000);
-    
-    gamepad.wait_ready();
 
     controller->setRumble(true);
     controller->updateState();
@@ -34,52 +30,28 @@ void setup()
     controller->setRumble(false);
 }
 
-void loop()
-{
+void loop() {
     controller->updateState();
 
-    uint8_t lx = state->ax();
-    uint8_t ly = state->ay();
-    uint8_t rx = state->cx();
-    uint8_t ry = state->cy();
+    Joystick.setButton(0, state->a());
+    Joystick.setButton(1, state->x());
+    Joystick.setButton(2, state->start());
+    Joystick.setButton(3, state->y());
+    Joystick.setButton(4, state->b());
+    Joystick.setButton(5, state->l());
+    Joystick.setButton(6, state->r());
+    Joystick.setButton(7, state->z());
 
-    // Triggers (0..255)
-    uint8_t lt = state->al();
-    uint8_t rt = state->ar();
+    Joystick.hat(state->dpad());
 
-    uint16_t buttons =
-        (state->start() << 0) |
-        (state->a() << 1) |
-        (state->b() << 2) |
-        (state->x() << 3) |
-        (state->y() << 4) |
-        (state->l() << 5) |
-        (state->r() << 6) |
-        (state->z() << 7);
-        // (state->dpadUp() << (8 + 4)) |
-        // (state->dpadRight() << (9 + 4)) |
-        // (state->dpadDown() << (10 + 4)) |
-        // (state->dpadLeft() << (11 + 4));
+    Joystick.X(state->ax() * 4);
+    Joystick.Y(1023 - (state->ay() * 4));
+    Joystick.Z(state->al() * 4);
+    Joystick.Zrotate(state->ar() * 4);
+    Joystick.sliderLeft(state->cx() * 4);
+    Joystick.sliderRight(1023 - (state->cy() * 4));
 
-    // Send HID report every loop iteration
-    gamepad.sendState(
-        buttons,
-        lx,
-        ly,
-        rx /*Z*/,
-        lt /*Rx*/,
-        rt /*Ry*/,
-        ry /*Rz (Right Y)*/
-    );
-
-    // Handle rumble from HID OUT reports (host-controlled)
-    // bool rumbleOn;
-    // if (gamepad.pollRumble(rumbleOn)) {
-    //     controller->setRumble(rumbleOn);
-    // } else {
-    //     // Fallback: manual rumble control (Start+A)
-    //     // controller->setRumble(state->start() && state->a());
-    // }
+    Joystick.send_now();
 
     if (
         state->a() &&
@@ -87,9 +59,8 @@ void loop()
         state->l() &&
         state->r() &&
         state->start()
-    )
-    {
-        rp2040.reboot();
+    ) {
+        rp2040.rebootToBootloader();
     }
 
     delay(10);
