@@ -1,7 +1,7 @@
 """Shared host-side helpers for locating the GCCPico's device nodes.
 
-Imported by bootsel.py and rumble.py (running a script puts its own directory
-on sys.path, so a plain `import gccpico` works).
+Imported by bootsel.py (running a script puts its own directory on sys.path,
+so a plain `import gccpico` works).
 """
 import glob
 import os
