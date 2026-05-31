@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Joystick.h>
+#include <stdint.h>
 
 #define GC_JOYSTICK_MIN 0x00
 #define GC_JOYSTICK_MID 0x80
@@ -27,6 +27,21 @@
 #define GC_MASK_DPAD_LEFT 0x1
 #define GC_MASK_DPAD_UPLEFT 0x9
 
+// HID hat-switch values. 0 = neutral (reported as the null state); 1..8 are the
+// eight directions, matching the values the arduino-pico Joystick library used
+// so the host sees an unchanged dpad.
+enum Hat : uint8_t {
+    HAT_IDLE = 0,
+    HAT_UP = 1,
+    HAT_UP_RIGHT = 2,
+    HAT_RIGHT = 3,
+    HAT_DOWN_RIGHT = 4,
+    HAT_DOWN = 5,
+    HAT_DOWN_LEFT = 6,
+    HAT_LEFT = 7,
+    HAT_UP_LEFT = 8,
+};
+
 class ControllerState
 {
 public:
@@ -49,48 +64,25 @@ public:
     bool dpadDown() const { return state[1] & GC_MASK_DPAD & GC_MASK_DPAD_DOWN; }
     bool dpadLeft() const { return state[1] & GC_MASK_DPAD & GC_MASK_DPAD_LEFT; }
 
-    HID_Joystick::HatPosition dpad() const
+    Hat dpad() const
     {
         switch (state[1] & GC_MASK_DPAD) {
-            case GC_MASK_DPAD_UP: return HID_Joystick::UP;
-            case GC_MASK_DPAD_UPRIGHT: return HID_Joystick::UP_RIGHT;
-            case GC_MASK_DPAD_RIGHT: return HID_Joystick::RIGHT;
-            case GC_MASK_DPAD_DOWNRIGHT: return HID_Joystick::DOWN_RIGHT;
-            case GC_MASK_DPAD_DOWN: return HID_Joystick::DOWN;
-            case GC_MASK_DPAD_DOWNLEFT: return HID_Joystick::DOWN_LEFT;
-            case GC_MASK_DPAD_LEFT: return HID_Joystick::LEFT;
-            case GC_MASK_DPAD_UPLEFT: return HID_Joystick::UP_LEFT;
-            default: return HID_Joystick::IDLE;
+            case GC_MASK_DPAD_UP: return HAT_UP;
+            case GC_MASK_DPAD_UPRIGHT: return HAT_UP_RIGHT;
+            case GC_MASK_DPAD_RIGHT: return HAT_RIGHT;
+            case GC_MASK_DPAD_DOWNRIGHT: return HAT_DOWN_RIGHT;
+            case GC_MASK_DPAD_DOWN: return HAT_DOWN;
+            case GC_MASK_DPAD_DOWNLEFT: return HAT_DOWN_LEFT;
+            case GC_MASK_DPAD_LEFT: return HAT_LEFT;
+            case GC_MASK_DPAD_UPLEFT: return HAT_UP_LEFT;
+            default: return HAT_IDLE;
         }
     }
 
-    unsigned char ax() const
-    {
-        return state[2];
-    }
-
-    unsigned char ay() const
-    {
-        return state[3];
-    }
-
-    unsigned char cx() const
-    {
-        return state[4];
-    }
-
-    unsigned char cy() const
-    {
-        return state[5];
-    }
-
-    unsigned char al() const
-    {
-        return state[6];
-    }
-
-    unsigned char ar() const
-    {
-        return state[7];
-    }
+    unsigned char ax() const { return state[2]; }
+    unsigned char ay() const { return state[3]; }
+    unsigned char cx() const { return state[4]; }
+    unsigned char cy() const { return state[5]; }
+    unsigned char al() const { return state[6]; }
+    unsigned char ar() const { return state[7]; }
 };
