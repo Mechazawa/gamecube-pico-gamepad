@@ -1,15 +1,15 @@
 #include "UsbHid.h"
+#include "PidFfb.h"
 
 #include <Adafruit_TinyUSB.h>
+#include <string.h>
 
 #define REPORT_ID_GAMEPAD 1
-#define REPORT_ID_RUMBLE  2
 
-// HID report descriptor.
-//
-// Input (id 1) mirrors the core GAMEPAD16 layout so existing host-side
-// mappings keep working. Output (id 2) is a single vendor-defined byte the
-// host writes to drive the rumble motor.
+// HID report descriptor: gamepad input (report id 1, the unchanged GAMEPAD16
+// layout) followed by the full PID force-feedback block (see UsbHidFfb.inc).
+// The force-feedback section's trailing 0xC0 closes this Application
+// collection, so we do NOT emit our own HID_COLLECTION_END here.
 static uint8_t const desc_hid_report[] = {
     HID_USAGE_PAGE(HID_USAGE_PAGE_DESKTOP),
     HID_USAGE(HID_USAGE_DESKTOP_GAMEPAD),
@@ -47,61 +47,65 @@ static uint8_t const desc_hid_report[] = {
         HID_REPORT_COUNT(32),
         HID_REPORT_SIZE(1),
         HID_INPUT(HID_DATA | HID_VARIABLE | HID_ABSOLUTE),
-        // Rumble output: one vendor-defined magnitude byte (0 = off)
-        HID_REPORT_ID(REPORT_ID_RUMBLE)
-        HID_USAGE_PAGE_N(HID_USAGE_PAGE_VENDOR, 2),
-        HID_USAGE(0x01),
-        HID_LOGICAL_MIN(0),
-        HID_LOGICAL_MAX_N(255, 2),
-        HID_REPORT_COUNT(1),
-        HID_REPORT_SIZE(8),
-        HID_OUTPUT(HID_DATA | HID_VARIABLE | HID_ABSOLUTE),
-    HID_COLLECTION_END
+        // ===== PID force feedback (verbatim, closes the collection) =====
+        #include "UsbHidFfb.inc"
 };
 
 static Adafruit_USBD_HID usb_hid;
 
-static volatile bool     s_rumble_on = false;
-static volatile uint8_t  s_rumble_raw = 0;
-static volatile uint32_t s_rx_count = 0;
-
-// Host asked us for an input report over the control pipe; we just send the
-// last gamepad state. Not commonly used (interrupt IN is the normal path).
+// Invoked on GET_REPORT. For feature reports the PID driver reads Block Load /
+// Pool here; for input report 2 it may read PID state.
 static uint16_t get_report_cb(uint8_t report_id, hid_report_type_t report_type,
                               uint8_t *buffer, uint16_t reqlen) {
-    (void) report_id;
-    (void) report_type;
-    (void) buffer;
+    if (report_type == HID_REPORT_TYPE_FEATURE) {
+        if (report_id == 6) {
+            return PidFfb::getBlockLoad(buffer);
+        }
+        if (report_id == 7) {
+            return PidFfb::getPool(buffer);
+        }
+    } else if (report_type == HID_REPORT_TYPE_INPUT) {
+        if (report_id == 2) {
+            return PidFfb::getState(buffer);
+        }
+    }
     (void) reqlen;
     return 0;
 }
 
-// Host wrote an output report. Two delivery paths:
-//   - SET_REPORT (control): report_id is the real id, buffer holds the data.
-//   - OUT endpoint:         report_id == 0, buffer[0] is the id, data follows.
+// Invoked on SET_REPORT (control) or OUT-endpoint data. Feature report 5 is
+// Create-New-Effect; everything else is a PID output report.
 static void set_report_cb(uint8_t report_id, hid_report_type_t report_type,
                           uint8_t const *buffer, uint16_t bufsize) {
-    (void) report_type;
-
-    uint8_t id = report_id;
-    uint8_t const *data = buffer;
-    uint16_t len = bufsize;
-    if (id == 0 && len >= 1) {
-        id = buffer[0];
-        data = buffer + 1;
-        len -= 1;
+    if (report_type == HID_REPORT_TYPE_FEATURE) {
+        if (report_id == 5) {
+            PidFfb::createNewEffect();
+        }
+        return;
     }
 
-    if (id == REPORT_ID_RUMBLE && len >= 1) {
-        s_rumble_raw = data[0];
-        s_rumble_on = (data[0] != 0);
-        s_rx_count++;
+    // OUTPUT report, delivered either via control SET_REPORT (report_id set,
+    // buffer is payload only) or via the OUT endpoint (report_id 0, buffer
+    // already starts with the report id). Normalise to [id, payload...].
+    uint8_t buf[CFG_TUD_HID_EP_BUFSIZE];
+    uint16_t len;
+    if (report_id == 0) {
+        len = bufsize > sizeof(buf) ? sizeof(buf) : bufsize;
+        memcpy(buf, buffer, len);
+    } else {
+        uint16_t n = bufsize > sizeof(buf) - 1 ? sizeof(buf) - 1 : bufsize;
+        buf[0] = report_id;
+        memcpy(buf + 1, buffer, n);
+        len = n + 1;
     }
+    PidFfb::handleOutput(buf, len);
 }
 
 namespace UsbHid {
 
 void begin(uint16_t vid, uint16_t pid, const char *manufacturer, const char *product) {
+    PidFfb::begin();
+
     if (!TinyUSBDevice.isInitialized()) {
         TinyUSBDevice.begin(0);
     }
@@ -120,8 +124,6 @@ void begin(uint16_t vid, uint16_t pid, const char *manufacturer, const char *pro
     usb_hid.setReportCallback(get_report_cb, set_report_cb);
     usb_hid.begin();
 
-    // If the core already enumerated us before begin() registered the HID
-    // interface, force a re-enumeration so the host sees the gamepad.
     if (TinyUSBDevice.mounted()) {
         TinyUSBDevice.detach();
         delay(10);
@@ -142,15 +144,19 @@ bool sendGamepad(const GamepadReport &report) {
 }
 
 bool rumbleOn() {
-    return s_rumble_on;
+    return PidFfb::rumbleRequested();
 }
 
 uint8_t rumbleRaw() {
-    return s_rumble_raw;
+    int16_t m = PidFfb::lastMagnitude();
+    if (m < 0) {
+        m = -m;
+    }
+    return m > 255 ? 255 : (uint8_t) m;
 }
 
 uint32_t rxCount() {
-    return s_rx_count;
+    return PidFfb::opCount();
 }
 
 } // namespace UsbHid

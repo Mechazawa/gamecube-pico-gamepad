@@ -4,7 +4,7 @@
 #include "ControllerState.h"
 #include "UsbHid.h"
 
-#define FW_VERSION "0.2.0-tinyusb-iter1"
+#define FW_VERSION "0.3.0-pidff"
 
 Controller *controller = nullptr;
 ControllerState *state = nullptr;
