@@ -6,6 +6,20 @@
 
 #define FW_VERSION "0.3.0-pidff"
 
+// Diagnostic logging over USB-CDC serial. Compiled in by default; build with
+// -DGCCPICO_DIAG=0 for a quiet release build. USB-CDC itself stays enabled
+// regardless (it carries the 'b' BOOTSEL command and the 1200-baud reflash).
+#ifndef GCCPICO_DIAG
+#define GCCPICO_DIAG 1
+#endif
+#if GCCPICO_DIAG
+#define DIAG(...) Serial.printf(__VA_ARGS__)
+#define DIAGLN(s) Serial.println(s)
+#else
+#define DIAG(...) ((void) 0)
+#define DIAGLN(s) ((void) 0)
+#endif
+
 Controller *controller = nullptr;
 ControllerState *state = nullptr;
 
@@ -60,18 +74,17 @@ static GamepadReport buildReport(ControllerState *s) {
 }
 
 static void printBanner() {
-    Serial.println();
-    Serial.println("=== GameCube USB gamepad ===");
-    Serial.print("firmware: ");
-    Serial.println(FW_VERSION);
-    Serial.println("usb stack: Adafruit TinyUSB (CDC + HID gamepad + rumble out)");
-    Serial.println("serial commands: b=BOOTSEL  r=rumble pulse  1=rumble on  0=off  s=state  v=version");
+    DIAGLN("");
+    DIAGLN("=== GameCube USB gamepad ===");
+    DIAG("firmware: %s\n", FW_VERSION);
+    DIAGLN("usb stack: Adafruit TinyUSB (CDC + HID gamepad + PID rumble)");
+    DIAGLN("serial commands: b=BOOTSEL  r=rumble pulse  1=rumble on  0=off  s=state  v=version");
 }
 
 static void printState() {
     uint8_t *st = controller->getRawControllerState();
-    Serial.printf("[state] %02x %02x %02x %02x %02x %02x %02x %02x\n",
-                  st[0], st[1], st[2], st[3], st[4], st[5], st[6], st[7]);
+    DIAG("[state] %02x %02x %02x %02x %02x %02x %02x %02x\n",
+         st[0], st[1], st[2], st[3], st[4], st[5], st[6], st[7]);
 }
 
 static void handleSerial() {
@@ -80,7 +93,7 @@ static void handleSerial() {
         switch (c) {
             case 'b':
             case 'B':
-                Serial.println("[cmd] rebooting to BOOTSEL...");
+                DIAGLN("[cmd] rebooting to BOOTSEL...");
                 Serial.flush();
                 delay(50);
                 rp2040.rebootToBootloader();
@@ -88,15 +101,15 @@ static void handleSerial() {
             case 'r':
             case 'R':
                 g_manual_until = millis() + 400;
-                Serial.println("[cmd] rumble pulse 400ms");
+                DIAGLN("[cmd] rumble pulse 400ms");
                 break;
             case '1':
                 g_manual_sticky = true;
-                Serial.println("[cmd] rumble ON (manual sticky)");
+                DIAGLN("[cmd] rumble ON (manual sticky)");
                 break;
             case '0':
                 g_manual_sticky = false;
-                Serial.println("[cmd] rumble OFF (manual sticky cleared)");
+                DIAGLN("[cmd] rumble OFF (manual sticky cleared)");
                 break;
             case 's':
             case 'S':
@@ -115,9 +128,9 @@ static void handleSerial() {
 static void logRumble(bool rumble) {
     uint32_t rx = UsbHid::rxCount();
     if (rumble != g_last_rumble_logged || rx != g_last_rx) {
-        Serial.printf("[rumble] state=%s raw=%u hostRx=%lu manual=%d\n",
-                      rumble ? "ON" : "OFF", UsbHid::rumbleRaw(),
-                      (unsigned long) rx, (int) manualRumbleActive());
+        DIAG("[rumble] state=%s raw=%u hostRx=%lu manual=%d\n",
+             rumble ? "ON" : "OFF", UsbHid::rumbleRaw(),
+             (unsigned long) rx, (int) manualRumbleActive());
         g_last_rumble_logged = rumble;
         g_last_rx = rx;
     }
@@ -128,10 +141,10 @@ static void heartbeat(bool rumble) {
     if (now - g_last_hb >= 2000) {
         g_last_hb = now;
         uint8_t *st = controller->getRawControllerState();
-        Serial.printf("[hb] t=%lus mounted=%d rumble=%d hostRx=%lu state=%02x%02x%02x%02x%02x%02x%02x%02x\n",
-                      now / 1000, (int) UsbHid::mounted(), (int) rumble,
-                      (unsigned long) UsbHid::rxCount(),
-                      st[0], st[1], st[2], st[3], st[4], st[5], st[6], st[7]);
+        DIAG("[hb] t=%lus mounted=%d rumble=%d hostRx=%lu state=%02x%02x%02x%02x%02x%02x%02x%02x\n",
+             now / 1000, (int) UsbHid::mounted(), (int) rumble,
+             (unsigned long) UsbHid::rxCount(),
+             st[0], st[1], st[2], st[3], st[4], st[5], st[6], st[7]);
     }
 }
 
