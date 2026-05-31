@@ -22,7 +22,7 @@ import struct
 import termios
 import fcntl
 
-from gccpico import VID, realpath_glob, sysfs_climb
+from gccpico import VIDS, realpath_glob, sysfs_climb
 
 TIOCMBIS = 0x5416  # set modem bits
 TIOCMBIC = 0x5417  # clear modem bits
@@ -39,7 +39,7 @@ def detect_port() -> "str | None":
         vid = sysfs_climb(f"/sys/class/tty/{os.path.basename(tty)}/device", "idVendor")
         if vid:
             try:
-                if open(vid).read().strip().lower() == VID:
+                if open(vid).read().strip().lower() in VIDS:
                     return tty
             except OSError:
                 pass

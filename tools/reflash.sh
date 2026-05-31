@@ -29,8 +29,17 @@ fi
 if lsusb | grep -q '2e8a:0003'; then
     echo ">> board already in BOOTSEL"
 else
-    echo ">> dropping board into BOOTSEL (1200-baud touch)"
-    python3 tools/bootsel.py || true
+    if python3 tools/bootsel.py --detect >/dev/null 2>&1; then
+        # Debug build: a USB-CDC serial port is present -> 1200-baud touch.
+        echo ">> dropping board into BOOTSEL (1200-baud touch)"
+        python3 tools/bootsel.py || true
+    elif lsusb | grep -q '057e:0337'; then
+        # Release build: GC adapter, no CDC -> reboot magic over libusb.
+        echo ">> dropping board into BOOTSEL (GC adapter reboot magic)"
+        sudo python3 tools/gcadapter.py reboot || true
+    else
+        echo "!! no GCCPico / GC-adapter device found to reboot"; exit 1
+    fi
     echo -n ">> waiting for BOOTSEL "
     for _ in $(seq 1 40); do
         if lsusb | grep -q '2e8a:0003'; then echo "ok"; break; fi
@@ -42,10 +51,9 @@ fi
 echo ">> flashing $UF2"
 picotool load -x "$UF2"
 
-echo -n ">> waiting for app serial port "
+echo -n ">> waiting for app to re-enumerate "
 for _ in $(seq 1 40); do
-    if compgen -G "/dev/ttyACM*" >/dev/null; then echo "ok"; break; fi
+    if lsusb | grep -q '057e:0337' || compgen -G "/dev/ttyACM*" >/dev/null; then echo "ok"; break; fi
     echo -n "."; sleep 0.25
 done
-ls -l /dev/ttyACM* 2>/dev/null || true
 echo ">> done"

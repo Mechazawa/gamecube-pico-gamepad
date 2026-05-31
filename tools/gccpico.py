@@ -6,12 +6,17 @@ on sys.path, so a plain `import gccpico` works).
 import glob
 import os
 
-VID = "2e8a"  # Raspberry Pi (RP2040)
+# USB vendor ids we recognise: 2e8a = RP2040 (bootloader / GCCPico builds),
+# 057e = the emulated Nintendo GameCube adapter.
+VIDS = ("2e8a", "057e")
+VID = "2e8a"  # kept for callers that compare a single RP2040 vid
+
+_NAME_HINTS = ("gccpico", "gamecube", "adapter", "nintendo", "rp2", "pico")
 
 
 def _is_gccpico(path):
     low = path.lower()
-    return "gccpico" in low or "rp2" in low or "pico" in low or VID in low
+    return any(h in low for h in _NAME_HINTS) or any(v in low for v in VIDS)
 
 
 def realpath_glob(pattern, require_match=True):

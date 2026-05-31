@@ -1,16 +1,21 @@
 #include <Arduino.h>
+#include <Adafruit_TinyUSB.h>
 
 #include "Controller.h"
-#include "ControllerState.h"
-#include "UsbHid.h"
+#include "GcAdapter.h"
 
-#define FW_VERSION "0.3.0-pidff"
+#define FW_VERSION "0.4.0-gcadapter"
 
-// Diagnostic logging over USB-CDC serial. Compiled in by default; build with
-// -DGCCPICO_DIAG=0 for a quiet release build. USB-CDC itself stays enabled
-// regardless (it carries the 'b' BOOTSEL command and the 1200-baud reflash).
+// Build profile:
+//   GCCPICO_DIAG = 0 (default, release): the device is ONLY the Nintendo GC
+//       adapter vendor interface (interface 0), exactly like the real WUP-028,
+//       so Dolphin auto-detects it. Reflash via the vendor reboot magic
+//       (tools/gcadapter.py reboot).
+//   GCCPICO_DIAG = 1 (debug): also keeps the USB-CDC serial interface for
+//       logging + the 1200-baud touch reset. NOT Dolphin-compatible (the extra
+//       interface/endpoints break Dolphin's interface-0 / endpoint detection).
 #ifndef GCCPICO_DIAG
-#define GCCPICO_DIAG 1
+#define GCCPICO_DIAG 0
 #endif
 #if GCCPICO_DIAG
 #define DIAG(...) Serial.printf(__VA_ARGS__)
@@ -21,63 +26,40 @@
 #endif
 
 Controller *controller = nullptr;
-ControllerState *state = nullptr;
 
-// Manual rumble override driven over the serial console, independent of the
-// host HID output report. Lets us exercise the GameCube rumble path on its own.
+// Manual rumble override over the serial console (debug builds only).
 static bool g_manual_sticky = false;
 static unsigned long g_manual_until = 0;
-
-// Diagnostics bookkeeping.
-static bool g_last_rumble_logged = false;
-static uint32_t g_last_rx = 0;
-static unsigned long g_last_hb = 0;
 
 static bool manualRumbleActive() {
     return g_manual_sticky || (long)(g_manual_until - millis()) > 0;
 }
 
-// Map the project's historical 0..1023 axis convention to the 16-bit signed HID
-// range, identical to the arduino-pico Joystick library's default (10-bit) mode
-// so the host sees the same axis behaviour it always did.
-static int16_t mapBits10(int v) {
-    if (v < 0) {
-        return 0;
-    }
-    if (v > 1023) {
-        return 32767;
-    }
-    return (int16_t) map(v, 0, 1023, -32767, 32767);
+// Build the adapter's 9-byte port payload from the raw GameCube poll response.
+//   st[0]: A=0x01 B=0x02 X=0x04 Y=0x08 Start=0x10
+//   st[1]: Left=0x01 Right=0x02 Down=0x04 Up=0x08 Z=0x10 R=0x20 L=0x40
+//   st[2..7]: stickX, stickY, cX, cY, triggerL, triggerR
+static void buildPort(uint8_t port[9], const uint8_t *st) {
+    port[0] = 0x10; // wired controller connected
+    port[1] = (uint8_t)((st[0] & 0x0F) | ((st[1] & 0x0F) << 4)); // A,B,X,Y | Left,Right,Down,Up
+    port[2] = (uint8_t)(((st[0] >> 4) & 0x01)          // Start
+                        | (((st[1] >> 4) & 0x01) << 1)  // Z
+                        | (((st[1] >> 5) & 0x01) << 2)  // R
+                        | (((st[1] >> 6) & 0x01) << 3)); // L
+    port[3] = st[2];
+    port[4] = st[3];
+    port[5] = st[4];
+    port[6] = st[5];
+    port[7] = st[6];
+    port[8] = st[7];
 }
 
-static GamepadReport buildReport(ControllerState *s) {
-    GamepadReport r = {};
-    r.x = mapBits10(s->ax() * 4);          // main stick X
-    r.y = mapBits10(1023 - s->ay() * 4);   // main stick Y (inverted)
-    r.z = mapBits10(s->al() * 4);          // left analog trigger
-    r.rz = mapBits10(s->ar() * 4);         // right analog trigger
-    r.rx = mapBits10(s->cx() * 4);         // C-stick X
-    r.ry = mapBits10(1023 - s->cy() * 4);  // C-stick Y (inverted)
-    r.hat = (uint8_t) s->dpad();
-
-    uint32_t b = 0;
-    b |= (uint32_t) s->a() << 0;
-    b |= (uint32_t) s->x() << 1;
-    b |= (uint32_t) s->start() << 2;
-    b |= (uint32_t) s->y() << 3;
-    b |= (uint32_t) s->b() << 4;
-    b |= (uint32_t) s->l() << 5;
-    b |= (uint32_t) s->r() << 6;
-    b |= (uint32_t) s->z() << 7;
-    r.buttons = b;
-    return r;
-}
-
+#if GCCPICO_DIAG
 static void printBanner() {
     DIAGLN("");
-    DIAGLN("=== GameCube USB gamepad ===");
+    DIAGLN("=== GameCube USB adapter (WUP-028 emulation, DEBUG build) ===");
     DIAG("firmware: %s\n", FW_VERSION);
-    DIAGLN("usb stack: Adafruit TinyUSB (CDC + HID gamepad + PID rumble)");
+    DIAGLN("note: debug build adds CDC serial and is NOT Dolphin-compatible");
     DIAGLN("serial commands: b=BOOTSEL  r=rumble pulse  1=rumble on  0=off  s=state  v=version");
 }
 
@@ -125,14 +107,14 @@ static void handleSerial() {
     }
 }
 
+static bool g_last_rumble_logged = false;
+static unsigned long g_last_hb = 0;
+
 static void logRumble(bool rumble) {
-    uint32_t rx = UsbHid::rxCount();
-    if (rumble != g_last_rumble_logged || rx != g_last_rx) {
-        DIAG("[rumble] state=%s raw=%u hostRx=%lu manual=%d\n",
-             rumble ? "ON" : "OFF", UsbHid::rumbleRaw(),
-             (unsigned long) rx, (int) manualRumbleActive());
+    if (rumble != g_last_rumble_logged) {
+        DIAG("[rumble] state=%s host=%d manual=%d\n",
+             rumble ? "ON" : "OFF", (int) GcAdapter::rumble(), (int) manualRumbleActive());
         g_last_rumble_logged = rumble;
-        g_last_rx = rx;
     }
 }
 
@@ -141,31 +123,50 @@ static void heartbeat(bool rumble) {
     if (now - g_last_hb >= 2000) {
         g_last_hb = now;
         uint8_t *st = controller->getRawControllerState();
-        DIAG("[hb] t=%lus mounted=%d rumble=%d hostRx=%lu state=%02x%02x%02x%02x%02x%02x%02x%02x\n",
-             now / 1000, (int) UsbHid::mounted(), (int) rumble,
-             (unsigned long) UsbHid::rxCount(),
+        DIAG("[hb] t=%lus mounted=%d started=%d rumble=%d state=%02x%02x%02x%02x%02x%02x%02x%02x\n",
+             now / 1000, (int) TinyUSBDevice.mounted(), (int) GcAdapter::started(), (int) rumble,
              st[0], st[1], st[2], st[3], st[4], st[5], st[6], st[7]);
     }
 }
+#endif // GCCPICO_DIAG
 
 void setup() {
+    if (!TinyUSBDevice.isInitialized()) {
+        TinyUSBDevice.begin(0);
+    }
+
+#if !GCCPICO_DIAG
+    // Drop the CDC interface that Adafruit adds by default so the GC-adapter
+    // vendor interface is interface 0 (what Dolphin claims).
+    TinyUSBDevice.clearConfiguration();
+#endif
+
+    TinyUSBDevice.setID(0x057E, 0x0337);
+    TinyUSBDevice.setManufacturerDescriptor("Nintendo");
+    TinyUSBDevice.setProductDescriptor("Wii U GameCube Controller Adapter");
+
+    GcAdapter::begin();
+#if GCCPICO_DIAG
     Serial.begin(115200);
+#endif
+
+    if (TinyUSBDevice.mounted()) {
+        TinyUSBDevice.detach();
+        delay(10);
+        TinyUSBDevice.attach();
+    }
 
     auto *initParams = new InitParams();
     initParams->pin = 10;
     Controller::initPio(initParams);
-
     controller = new Controller(initParams, 8);
     controller->init();
 
-    state = new ControllerState(controller->getRawControllerState());
-
-    UsbHid::begin(0x2E8A, 0x0010, "GCCPico", "GCCPico Gamepad");
-
+#if GCCPICO_DIAG
     printBanner();
+#endif
 
-    // Brief boot rumble pulse: a sign of life and a quick exercise of the
-    // GameCube rumble path on startup.
+    // Brief boot rumble pulse: a sign of life and a quick GameCube-link check.
     controller->setRumble(true);
     controller->updateState();
     delay(150);
@@ -178,24 +179,27 @@ void loop() {
     TinyUSBDevice.task();
 #endif
 
+#if GCCPICO_DIAG
     handleSerial();
+#endif
 
-    if (!UsbHid::mounted()) {
+    if (!TinyUSBDevice.mounted()) {
         yield();
         return;
     }
 
-    bool rumble = UsbHid::rumbleOn() || manualRumbleActive();
+    bool rumble = GcAdapter::rumble() || manualRumbleActive();
     controller->setRumble(rumble);
     controller->updateState();
 
-    if (UsbHid::ready()) {
-        GamepadReport r = buildReport(state);
-        UsbHid::sendGamepad(r);
-    }
+    uint8_t port[9];
+    buildPort(port, controller->getRawControllerState());
+    GcAdapter::sendPort1(port);
 
+#if GCCPICO_DIAG
     logRumble(rumble);
     heartbeat(rumble);
+#endif
 
     yield();
 }

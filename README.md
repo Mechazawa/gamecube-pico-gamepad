@@ -2,10 +2,17 @@ Work in progress gamecube controller USB converter.
 
 The gamecube controller driver is a modified version of the work done by David Pagels on [Retro Pico Switch](https://github.com/DavidPagels/retro-pico-switch)
 
-The USB side uses Adafruit TinyUSB (`-DUSE_TINYUSB`) with a hand-built HID
-descriptor: a gamepad input report plus a PID force-feedback collection so the
-host can drive rumble (Linux `hid-pidff`, Windows DirectInput, SDL). The PID
-descriptor is vendored from the MIT-licensed [ArduinoJoystickWithFFBLibrary](https://github.com/YukMingLaw/ArduinoJoystickWithFFBLibrary).
+## USB
+
+The device emulates Nintendo's **GameCube Controller Adapter for Wii U**
+(WUP-028, USB `057E:0337`) on top of Adafruit TinyUSB. Dolphin (and a Switch)
+auto-detect it by VID:PID over libusb with no configuration, including rumble.
+The attached controller appears on port 1. On Linux, Dolphin needs access to the
+device — use the same udev rule as a real adapter, or run with privileges.
+
+The protocol (interface 0, two interrupt endpoints): host sends `0x13` to start
+streaming and `{0x11,r0,r1,r2,r3}` to set per-port rumble; the device streams
+37-byte input packets (`0x21` + four 9-byte ports). See `src/GcAdapter.cpp`.
 
 ## Build & flash
 
@@ -14,18 +21,17 @@ tools/reflash.sh            # build, drop to BOOTSEL, flash (no button combo)
 tools/reflash.sh --no-build # flash the existing build
 ```
 
-Reflashing needs no `A+B+L+R+Start`: `tools/bootsel.py` does a 1200-baud touch
-on the USB serial port to reboot into BOOTSEL, or send `b` over the serial
-console. `tools/pio.sh` wraps PlatformIO (works around a venv built for an older
-Python). The serial console (115200) also accepts `r`/`1`/`0` to drive rumble,
-`s` for controller state, `v` for the version banner.
+The release firmware is the bare GC adapter (no CDC serial), so `reflash.sh`
+reboots it into BOOTSEL with a vendor "reboot magic" over libusb
+(`tools/gcadapter.py reboot`, needs sudo / a udev rule) and then `picotool load`.
 
-## Rumble
+`tools/gcadapter.py test` exercises the protocol like Dolphin does (start
+streaming, print port-1 input, pulse rumble).
 
-```sh
-tools/rumble.py verify   # check the device advertises force feedback
-tools/rumble.py play     # upload + play an effect (turns the motor on)
-```
+### Debug build
 
-Diagnostics are logged over USB serial; build with `-DGCCPICO_DIAG=0` for a
-quiet release.
+`-DGCCPICO_DIAG=1` adds a USB-CDC serial console (115200) for logging and the
+1200-baud touch reset, with serial commands `b`=BOOTSEL `r`/`1`/`0`=rumble
+`s`=state `v`=version. It adds extra interfaces, so it is **not**
+Dolphin-compatible — use it only for bring-up. `tools/pio.sh` wraps PlatformIO
+(works around a venv built for an older Python).
