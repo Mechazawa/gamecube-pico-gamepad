@@ -22,43 +22,27 @@ import struct
 import termios
 import fcntl
 
-RP2040_VID = "2e8a"
+from gccpico import VID, realpath_glob, sysfs_climb
+
 TIOCMBIS = 0x5416  # set modem bits
 TIOCMBIC = 0x5417  # clear modem bits
 TIOCM_DTR = 0x002
 
 
-def _tty_vendor(tty: str) -> str:
-    """Return the USB idVendor (lowercase hex, no 0x) for a /dev/ttyACMx, or ''."""
-    name = os.path.basename(tty)
-    dev = os.path.realpath(f"/sys/class/tty/{name}/device")
-    # Walk up to the USB device dir that holds idVendor
-    cur = dev
-    for _ in range(6):
-        vid = os.path.join(cur, "idVendor")
-        if os.path.exists(vid):
-            try:
-                with open(vid) as f:
-                    return f.read().strip().lower()
-            except OSError:
-                return ""
-        parent = os.path.dirname(cur)
-        if parent == cur:
-            break
-        cur = parent
-    return ""
-
-
-def detect_port() -> str | None:
+def detect_port() -> "str | None":
     # Prefer the stable by-id symlink if present.
-    for link in glob.glob("/dev/serial/by-id/*"):
-        low = link.lower()
-        if "pico" in low or "rp2" in low:
-            return os.path.realpath(link)
+    port = realpath_glob("/dev/serial/by-id/*")
+    if port:
+        return port
     # Fall back to scanning ttyACM* for the Raspberry Pi vendor id.
     for tty in sorted(glob.glob("/dev/ttyACM*")):
-        if _tty_vendor(tty) == RP2040_VID:
-            return tty
+        vid = sysfs_climb(f"/sys/class/tty/{os.path.basename(tty)}/device", "idVendor")
+        if vid:
+            try:
+                if open(vid).read().strip().lower() == VID:
+                    return tty
+            except OSError:
+                pass
     # Last resort: first ttyACM.
     accs = sorted(glob.glob("/dev/ttyACM*"))
     return accs[0] if accs else None

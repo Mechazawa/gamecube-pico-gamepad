@@ -47,30 +47,14 @@ static GamepadReport buildReport(ControllerState *s) {
     r.hat = (uint8_t) s->dpad();
 
     uint32_t b = 0;
-    if (s->a()) {
-        b |= 1u << 0;
-    }
-    if (s->x()) {
-        b |= 1u << 1;
-    }
-    if (s->start()) {
-        b |= 1u << 2;
-    }
-    if (s->y()) {
-        b |= 1u << 3;
-    }
-    if (s->b()) {
-        b |= 1u << 4;
-    }
-    if (s->l()) {
-        b |= 1u << 5;
-    }
-    if (s->r()) {
-        b |= 1u << 6;
-    }
-    if (s->z()) {
-        b |= 1u << 7;
-    }
+    b |= (uint32_t) s->a() << 0;
+    b |= (uint32_t) s->x() << 1;
+    b |= (uint32_t) s->start() << 2;
+    b |= (uint32_t) s->y() << 3;
+    b |= (uint32_t) s->b() << 4;
+    b |= (uint32_t) s->l() << 5;
+    b |= (uint32_t) s->r() << 6;
+    b |= (uint32_t) s->z() << 7;
     r.buttons = b;
     return r;
 }

@@ -17,12 +17,11 @@ the GameCube rumble motor on. Standard library only (no pyserial / evdev).
 """
 import os
 import sys
-import glob
 import time
 import struct
 import fcntl
 
-VID = "2e8a"
+from gccpico import realpath_glob, sysfs_climb
 
 # ---- input subsystem constants ----
 EV_FF = 0x15
@@ -46,42 +45,26 @@ def _ioc(d, t, nr, size):
 
 
 def find_hidraw():
-    for l in glob.glob("/dev/input/by-id/*event-joystick"):
-        # the matching hidraw shares the if prefix
-        pass
-    cands = glob.glob("/dev/input/by-id/*-hidraw")
-    for l in cands:
-        if "GCCPico" in l or "2e8a" in l.lower():
-            return os.path.realpath(l)
-    return os.path.realpath(cands[0]) if cands else None
+    return (realpath_glob("/dev/input/by-id/*-hidraw")
+            or realpath_glob("/dev/input/by-id/*-hidraw", require_match=False))
 
 
 def find_event():
-    for l in glob.glob("/dev/input/by-id/*event*"):
-        if "GCCPico" in l:
-            return os.path.realpath(l)
-    return None
+    return realpath_glob("/dev/input/by-id/*event*")
 
 
 def report_descriptor_for_event(evpath):
-    # /sys/class/input/eventN/device/../../report_descriptor (the hid device)
+    # /sys/class/input/eventN/device/.../report_descriptor (the hid device)
     name = os.path.basename(evpath)
-    sysdev = os.path.realpath(f"/sys/class/input/{name}/device")
-    # climb to the hid device dir containing report_descriptor
-    cur = sysdev
-    for _ in range(6):
-        rd = os.path.join(cur, "report_descriptor")
-        if os.path.exists(rd):
-            with open(rd, "rb") as f:
-                return f.read()
-        cur = os.path.dirname(cur)
+    rd = sysfs_climb(f"/sys/class/input/{name}/device", "report_descriptor")
+    if rd:
+        with open(rd, "rb") as f:
+            return f.read()
     return None
 
 
 def descriptor_has_pid(desc):
-    # Look for Usage Page (Physical Interface) = 0x05 0x0F, and an Output item.
-    has_pid_page = b"\x05\x0f" in desc.lower() if False else False
-    # do a byte scan (case-insensitive not meaningful for bytes)
+    # Scan for Usage Page (Physical Interface) = 0x05 0x0F, and an Output item.
     has_pid_page = False
     has_output = False
     i = 0
