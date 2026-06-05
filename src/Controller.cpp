@@ -3,6 +3,13 @@
 #include "Controller.h"
 #include "Controller.pio.h"
 
+// Gap left on the bus after each transaction before the next poll. The Joybus
+// link itself runs at ~1 poll / 300us; the USB input endpoint is interrupt/1ms,
+// so polling faster than 1kHz cannot make the host see fresher data. This gap
+// keeps the controller comfortably within that budget while minimising the age
+// of the sample sent on each USB frame.
+static const unsigned kInterPollGapUs = 100;
+
 Controller::Controller(InitParams *initParams, uint8_t sizeofControllerState) {
     _pin = initParams->pin;
     _pio = initParams->pio;
@@ -35,23 +42,31 @@ void Controller::initPio(InitParams *initParams) {
     // Send a command to see if connected controller is N64 or Gamecube
     uint8_t initRequest[1] = {0x00};
     uint8_t initResponse[3] = {0x00};
-    transfer(initParams->pio, initParams->sm, initRequest, sizeof(initRequest),
-             initResponse, sizeof(initResponse));
+    transfer(initParams->pio, initParams->sm, initParams->offset, initRequest,
+             sizeof(initRequest), initResponse, sizeof(initResponse));
 }
 
 void Controller::transfer(uint8_t *request, uint8_t requestLength,
                           uint8_t *response, uint8_t responseLength) {
-    transfer(_pio, _sm, request, requestLength, response, responseLength);
+    transfer(_pio, _sm, _offset, request, requestLength, response, responseLength);
 }
 
-void Controller::transfer(PIO pio, uint sm, uint8_t *request,
+void Controller::transfer(PIO pio, uint sm, uint offset, uint8_t *request,
                           uint8_t requestLength, uint8_t *response,
                           uint8_t responseLength) {
     pio_sm_clear_fifos(pio, sm);
     pio_sm_put_blocking(pio, sm, ((responseLength - 1) & 0x1F) << 24);
     sendRequest(pio, sm, request, requestLength);
-    getResponse(pio, sm, response, responseLength);
-    delayMicroseconds(4 * (requestLength + responseLength) + 450);
+    if (!getResponse(pio, sm, response, responseLength)) {
+        // A timeout leaves the SM wedged in the receive section (blocked on
+        // `wait 0 pin 0`); reset it back to the send entry so the next poll
+        // recovers instead of failing forever (e.g. after a hot-swap).
+        pio_sm_set_enabled(pio, sm, false);
+        pio_sm_restart(pio, sm);
+        pio_sm_exec(pio, sm, pio_encode_jmp(offset));
+        pio_sm_set_enabled(pio, sm, true);
+    }
+    delayMicroseconds(kInterPollGapUs);
 }
 
 void Controller::sendRequest(PIO pio, uint sm, uint8_t *request,
@@ -64,7 +79,7 @@ void Controller::sendRequest(PIO pio, uint sm, uint8_t *request,
     }
 }
 
-void Controller::getResponse(PIO pio, uint sm, uint8_t *response,
+bool Controller::getResponse(PIO pio, uint sm, uint8_t *response,
                              uint8_t responseLength) {
     int16_t remainingResponseBytes = responseLength;
     while (remainingResponseBytes > 0) {
@@ -74,12 +89,13 @@ void Controller::getResponse(PIO pio, uint sm, uint8_t *response,
             timedOut = micros() > timeout_us;
         }
         if (timedOut) {
-            return; // Timeout occurred
+            return false; // Timeout occurred
         }
         uint32_t data = pio_sm_get(pio, sm);
         response[responseLength - remainingResponseBytes] = (uint8_t) (data & 0xFF);
         remainingResponseBytes--;
     }
+    return true;
 }
 
 void Controller::init() {

@@ -25,7 +25,7 @@ sendStop:
 receiveByte:
   set x, 7
 getBit:
-  wait 0 pin 0 [T1 + 1]; wait until the line goes low, then wait until a 1 bit would register as high
+  wait 0 pin 0 [T1*2 - 1]; wait for the falling edge, then sample ~2us in (mid-bit) for margin against slow rising edges (e.g. PhobGCC RC/pullup timings)
   in pins 1 ; read
   wait 1 pin 0 ; wait for a 1 if it's a 0
   jmp x-- getBit ; get the next bit
@@ -36,11 +36,13 @@ getBit:
 
 % c-sdk {
 #include "hardware/clocks.h"
+#include "hardware/gpio.h"
 #include "hardware/pio.h"
 
 static inline void controller_program_init(PIO pio, uint sm, uint offset, uint pin_controller, pio_sm_config *c) {
     pio_sm_set_consecutive_pindirs(pio, sm, pin_controller, 1, false);
     pio_gpio_init(pio, pin_controller);
+    gpio_pull_up(pin_controller); // open-drain Joybus needs a pull-up to form command highs
 
     sm_config_set_in_pins(c, pin_controller);
     sm_config_set_sideset_pins(c, pin_controller);

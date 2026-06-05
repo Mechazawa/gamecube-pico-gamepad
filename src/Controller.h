@@ -32,14 +32,14 @@ public:
     }
 
 private:
-    static void transfer(PIO pio, uint sm, uint8_t *request,
+    static void transfer(PIO pio, uint sm, uint offset, uint8_t *request,
                          uint8_t requestLength, uint8_t *response,
                          uint8_t responseLength);
 
     static void sendRequest(PIO pio, uint sm, uint8_t *request,
                      uint8_t requestLength);
 
-    static void getResponse(PIO pio, uint sm, uint8_t *response,
+    static bool getResponse(PIO pio, uint sm, uint8_t *response,
                      uint8_t responseLength);
 
 protected:
